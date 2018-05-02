@@ -18,7 +18,7 @@ theme_set(theme_bw())
 ```{r ETL}
 events = read_csv("https://github.com/wikimedia-research/Discovery-Hiring-Analyst-2016/raw/master/events_log.csv.gz")
 
-events = events %>% slice(1:5e4) # Útil para testar código em dados pequenos. Comente na hora de processá-los para valer.
+#events = events %>% slice(1:5e4) # Útil para testar código em dados pequenos. Comente na hora de processá-los para valer.
 
 events = events %>% 
     group_by(session_id) %>% 
@@ -32,6 +32,7 @@ events = events %>%
 
 
 ```{r}
+
 events %>% 
     mutate(date = round_date(date, unit = "day")) %>% 
     count(date, group) %>% 
@@ -40,5 +41,23 @@ events %>%
 ```
 
 ## Por tipo
+```{r}
+
+events %>% 
+    mutate(date = round_date(date, unit = "day")) %>% 
+    count(date, action) %>% 
+    ggplot(aes(x = date, y = n, fill = action)) + 
+    geom_area()
+
+```
+```{r}
+
+events %>% 
+    mutate(date = round_date(date, unit = "day")) %>% 
+    count(date, action, group) %>% 
+    ggplot(aes(x = date, y = n, fill = action)) + 
+    geom_area()+ facet_grid(.~group)
+
+```
 
 ## Etc.
