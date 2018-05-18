@@ -1,5 +1,7 @@
 # Rpubs
 [Link da análise no Rpubs](http://rpubs.com/luizcz/wiki)
+[Link da análise no Rpubs com intervalo de confiança](http://rpubs.com/luizcz/atividadeic)
+
 
 # Sessões, buscas e navegação na wikimedia
 

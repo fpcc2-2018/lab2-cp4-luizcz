@@ -1,5 +1,5 @@
 ---
-title: "Análise dos dados da wikipedia"
+title: "Análise dos dados da wikipedia com intervalo de confiança"
 output: html_notebook
 ---
 ##Dados da wikipedia
@@ -12,6 +12,8 @@ Aqui, exploramos esses dados. Esses dados são derivadoes dos dados originais de
 library(tidyverse)
 library(here)
 library(lubridate)
+library(resample) 
+library(boot) 
 theme_set(theme_bw())
 ```
 
@@ -30,295 +32,256 @@ events = events %>%
 Essa analise busca responder as quetões originais do desafio criado pela wikimedia. Primeiramente busco responde as duas perguntas que são relacionadas que são:
 
 ##What is our daily overall clickthrough rate? How does it vary between the groups?
+
+```{r}
+set.seed(1234)
+funcao_bootstrap <- function(dado, indices) {
+
+  TotalPorHora <- dado %>%
+    slice(indices) %>% 
+    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>% 
+    group_by(session_start_date) %>%
+    summarise(count=n())%>%
+    pull(count)
+  clickRateHora <- dado %>%
+    filter(num_clicks > 0) %>%
+    slice(indices) %>% 
+    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>% 
+    group_by(session_start_date) %>%
+    summarise(count=n())%>%
+    pull(count)
+
+  
+  resultado = clickRateHora / TotalPorHora
+  
+  return(mean(resultado))
+}
+
+bootstraps <- boot(data = buscas, 
+                 statistic = funcao_bootstrap, 
+                 R = 2000)
+
+summary(bootstraps$t)
+
+boot.ci(boot.out = bootstraps, conf = 0.95, type = "basic")
+```
+
+A taxa de clique geral média encontrada na população com uma confiança de 95% está localizada no intervalo entre 24,24% e 24,72%.
+
+#Comparando entre os grupos
+
+```{r}
+
+funcao_bootstrap <- function(dado, indices) {
+
+  TotalPorHoraA <- dado %>%
+    slice(indices) %>% 
+    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>%
+    filter( group == 'a')%>% 
+    group_by(session_start_date) %>%
+    summarise(count=n())%>%
+    pull(count)
+  clickRateHoraA <- dado %>%
+    filter(num_clicks > 0) %>%
+    slice(indices) %>% 
+    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>%
+    filter( group == 'a')%>% 
+    group_by(session_start_date) %>%
+    summarise(count=n())%>%
+    pull(count)
+
+  
+  resultadoA = clickRateHoraA / TotalPorHoraA
+  
+  TotalPorHoraB <- dado %>%
+    slice(indices) %>% 
+    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>%
+    filter( group == 'b')%>% 
+    group_by(session_start_date) %>%
+    summarise(count=n())%>%
+    pull(count)
+  clickRateHoraB <- dado %>%
+    slice(indices) %>% 
+    filter(num_clicks > 0) %>%
+    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>%
+    filter( group == 'b')%>% 
+    group_by(session_start_date) %>%
+    summarise(count=n())%>%
+    pull(count)
+
+  
+  resultadoB = clickRateHoraB / TotalPorHoraB
+  
+  return(mean(resultadoA) - mean(resultadoB))
+}
+
+bootstraps <- boot(data = buscas, 
+                 statistic = funcao_bootstrap, 
+                 R = 2000)
+
+summary(bootstraps$t)
+
+boot.ci(boot.out = bootstraps, conf = 0.95, type = "basic")
+```
+Como podemos ver pelo resultado da comparação, o intervalo não passa pelo 0 o que significa que com uma confiança de 95% podemos afirmar que há uma diferença significativa entre o grupo A e o grupo B na população. Essa diferença está entre 13,15% e 14,35% onde o grupo A tem taxas maiores que o grupo B.
 ##What is our daily overall zero results rate? How does it vary between the groups?
-
-Para conseguirmos visualizar o comportamento dos dados iremos utilizar gráficos de barras para cada um dos grupos por dia.
-
 ```{r}
-buscas %>% 
-    mutate(session_start_date = round_date(session_start_date, unit = "day")) %>% 
-    mutate(click = as.factor(ifelse(num_clicks == 0, 
-                             "zero results rate", 
-                             "clickthrough rate"
-        ))) %>%
-    group_by(session_start_date, session_id, click, group)%>%
-    summarise(num_clicks = median(num_clicks))%>%
-    ggplot(aes(x = session_start_date)) + 
-    geom_bar(aes(fill = click))+facet_grid(group ~ .)+
-   labs(fill="")
 
+funcao_bootstrap <- function(dado, indices) {
+
+  TotalPorHora <- dado %>%
+    slice(indices) %>% 
+    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>% 
+    group_by(session_start_date) %>%
+    summarise(count=n())%>%
+    pull(count)
+  clickRateHora <- dado %>%
+    filter(num_clicks == 0) %>%
+    slice(indices) %>% 
+    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>% 
+    group_by(session_start_date) %>%
+    summarise(count=n())%>%
+    pull(count)
+
+  
+  resultado = clickRateHora / TotalPorHora
+  
+  return(mean(resultado))
+}
+
+bootstraps <- boot(data = buscas, 
+                 statistic = funcao_bootstrap, 
+                 R = 2000)
+
+summary(bootstraps$t)
+
+boot.ci(boot.out = bootstraps, conf = 0.95, type = "basic")
 ```
 
-Para ter uma repesentação mais concreta desse valor podemos quantificar utilizando a média do percentuais de todos os dias tanto para o grupo A como para o grupo B. 
+A taxa de zero clique geral média encontrada na população com uma confiança de 95% está localizada no intervalo entre 75,05% e 75,68%.
 
-```{r}
-NumeroDeBuscasSemClickPorDiaGrupoA <- buscas %>% 
-    mutate(session_start_date = round_date(session_start_date, unit = "day")) %>% 
-    mutate(click = as.factor(ifelse(num_clicks == 0, 
-                             "zero results rate", 
-                             "clickthrough rate"
-        ))) %>%
-    group_by(session_start_date)%>%
-    filter(click == "zero results rate" & group == 'a')%>%
-    summarise(count=n())
-
-NumeroDeBuscasComClickPorDiaGrupoA <- buscas %>% 
-    mutate(session_start_date = round_date(session_start_date, unit = "day")) %>% 
-    mutate(click = as.factor(ifelse(num_clicks == 0, 
-                             "zero results rate", 
-                             "clickthrough rate"
-        ))) %>%
-    group_by(session_start_date)%>%
-    filter(click == "clickthrough rate" & group == 'a')%>%
-    summarise(count=n())
-
-NumeroDeBuscasTotalPorDiaGrupoA <- buscas %>% 
-    mutate(session_start_date = round_date(session_start_date, unit = "day")) %>% 
-    mutate(click = as.factor(ifelse(num_clicks == 0, 
-                             "zero results rate", 
-                             "clickthrough rate"
-        ))) %>%
-    group_by(session_start_date)%>%
-    filter( group == 'a')%>%
-    summarise(count=n())
-
-
-mean(NumeroDeBuscasComClickPorDiaGrupoA$count/NumeroDeBuscasTotalPorDiaGrupoA$count)
-mean(NumeroDeBuscasSemClickPorDiaGrupoA$count/NumeroDeBuscasTotalPorDiaGrupoA$count)
-
-
-```
+#Comparando entre os grupos
 
 ```{r}
 
-NumeroDeBuscasSemClickPorDiaGrupoB <- buscas %>% 
-    mutate(session_start_date = round_date(session_start_date, unit = "day")) %>% 
-    mutate(click = as.factor(ifelse(num_clicks == 0, 
-                             "zero results rate", 
-                             "clickthrough rate"
-        ))) %>%
-    group_by(session_start_date)%>%
-    filter(click == "zero results rate" & group == 'b')%>%
-    summarise(count=n())
-    
+funcao_bootstrap <- function(dado, indices) {
 
-NumeroDeBuscasComClickPorDiaGrupoB <- buscas %>% 
-    mutate(session_start_date = round_date(session_start_date, unit = "day")) %>% 
-    mutate(click = as.factor(ifelse(num_clicks == 0, 
-                             "zero results rate", 
-                             "clickthrough rate"
-        ))) %>%
-    group_by(session_start_date)%>%
-    filter(click == "clickthrough rate" & group == 'b')%>%
-    summarise(count=n())
-
-NumeroDeBuscasTotalPorDiaGrupoB <- buscas %>% 
-    mutate(session_start_date = round_date(session_start_date, unit = "day")) %>% 
-    mutate(click = as.factor(ifelse(num_clicks == 0, 
-                             "zero results rate", 
-                             "clickthrough rate"
-        ))) %>%
-    group_by(session_start_date)%>%
-    filter( group == 'b')%>%
-    summarise(count=n())
-
-mean(NumeroDeBuscasComClickPorDiaGrupoB$count/NumeroDeBuscasTotalPorDiaGrupoB$count)
-mean(NumeroDeBuscasSemClickPorDiaGrupoB$count/NumeroDeBuscasTotalPorDiaGrupoB$count)
-
-
-```
-
-Como existem dois dias que tem um conjunto menor de dados  podemos utilizar como unidade a hora e ver o valor proporcional.
-```{r}
-
-buscas %>% 
-    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>% 
-    mutate(click = as.factor(ifelse(num_clicks == 0, 
-                             "zero results rate", 
-                             "clickthrough rate"
-        ))) %>%
-    group_by(session_start_date, session_id, click, group)%>%
-    ggplot(aes(x = session_start_date)) + 
-    geom_bar(aes(fill = click))+facet_grid(group ~ .)+
-   labs(fill="")
-```
-
-```{r}
-NumeroDeBuscasSemClickPorHora <- buscas %>% 
-    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>% 
-    mutate(click = as.factor(ifelse(num_clicks == 0, 
-                             "zero results rate", 
-                             "clickthrough rate"
-        ))) %>%
-    group_by(session_start_date)%>%
-    filter(click == "zero results rate" )%>%
-    summarise(count=n())
-
-NumeroDeBuscasComClickPorHora <- buscas %>% 
-    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>% 
-    mutate(click = as.factor(ifelse(num_clicks == 0, 
-                             "zero results rate", 
-                             "clickthrough rate"
-        ))) %>%
-    group_by(session_start_date)%>%
-    filter(click == "clickthrough rate" )%>%
-    summarise(count=n())
-
-NumeroDeBuscasTotalPorHora <- buscas %>% 
-    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>% 
-    mutate(click = as.factor(ifelse(num_clicks == 0, 
-                             "zero results rate", 
-                             "clickthrough rate"
-        ))) %>%
-    group_by(session_start_date)%>%
-    summarise(count=n())
-
-
-mean(NumeroDeBuscasComClickPorHora$count/NumeroDeBuscasTotalPorHora$count)
-mean(NumeroDeBuscasSemClickPorHora$count/NumeroDeBuscasTotalPorHora$count)
-
-
-```
-
-```{r}
-NumeroDeBuscasSemClickPorHoraGrupoA <- buscas %>% 
-    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>% 
-    mutate(click = as.factor(ifelse(num_clicks == 0, 
-                             "zero results rate", 
-                             "clickthrough rate"
-        ))) %>%
-    group_by(session_start_date)%>%
-    filter(click == "zero results rate" & group == 'a')%>%
-    summarise(count=n())
-
-NumeroDeBuscasComClickPorHoraGrupoA <- buscas %>% 
-    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>% 
-    mutate(click = as.factor(ifelse(num_clicks == 0, 
-                             "zero results rate", 
-                             "clickthrough rate"
-        ))) %>%
-    group_by(session_start_date)%>%
-    filter(click == "clickthrough rate" & group == 'a')%>%
-    summarise(count=n())
-
-NumeroDeBuscasTotalPorHoraGrupoA <- buscas %>% 
-    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>% 
-    mutate(click = as.factor(ifelse(num_clicks == 0, 
-                             "zero results rate", 
-                             "clickthrough rate"
-        ))) %>%
-    group_by(session_start_date)%>%
-    filter( group == 'a')%>%
-    summarise(count=n())
-
-
-mean(NumeroDeBuscasComClickPorHoraGrupoA$count/NumeroDeBuscasTotalPorHoraGrupoA$count)
-mean(NumeroDeBuscasSemClickPorHoraGrupoA$count/NumeroDeBuscasTotalPorHoraGrupoA$count)
-
-
-```
-
-```{r}
-
-NumeroDeBuscasSemClickPorHoraGrupoB <- buscas %>% 
-    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>% 
-    mutate(click = as.factor(ifelse(num_clicks == 0, 
-                             "zero results rate", 
-                             "clickthrough rate"
-        ))) %>%
-    group_by(session_start_date)%>%
-    filter(click == "zero results rate" & group == 'b')%>%
-    summarise(count=n())
-    
-
-NumeroDeBuscasComClickPorHoraGrupoB <- buscas %>% 
-    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>% 
-    mutate(click = as.factor(ifelse(num_clicks == 0, 
-                             "zero results rate", 
-                             "clickthrough rate"
-        ))) %>%
-    group_by(session_start_date)%>%
-    filter(click == "clickthrough rate" & group == 'b')%>%
-    summarise(count=n())
-
-NumeroDeBuscasTotalPorHoraGrupoB <- buscas %>% 
-    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>% 
-    mutate(click = as.factor(ifelse(num_clicks == 0, 
-                             "zero results rate", 
-                             "clickthrough rate"
-        ))) %>%
-    group_by(session_start_date)%>%
-    filter( group == 'b')%>%
-    summarise(count=n())
-
-mean(NumeroDeBuscasComClickPorHoraGrupoB$count/NumeroDeBuscasTotalPorHoraGrupoB$count)
-mean(NumeroDeBuscasSemClickPorHoraGrupoB$count/NumeroDeBuscasTotalPorHoraGrupoB$count)
-
-
-```
-
-Como o resultado geral temos que o clickthrough rate aproximadamente 25% e o zero results rate aproximadamente 75%.Como podemos ver o grupo A tem um maior clickthrough rate que o grupo B essa diferença está em torno de 14%. Como podemos ver utilizar a hora como unidade melhorou os indices de clickthrough rate para os dois grupos.
-
-##Which results do people tend to try first? How does it change day-to-day?
-
-Para evitar problemas nos dados iremos remover as buscas que não tivera cliques e as buscas que tem um primeiro clique que é maior que os resultados mostrados ao usuário.s
-
-```{r}
-buscas %>% 
+  TotalPorHoraA <- dado %>%
+    slice(indices) %>% 
     mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>%
-    filter(!is.na(first_click) & first_click <= results)%>%
-    group_by(session_start_date)%>%
-    ggplot(aes(x = session_start_date, y = first_click)) +
-    geom_point(alpha=0.4)
-```
-```{r}
-buscas %>% 
-    mutate(session_start_date = round_date(session_start_date, unit = "day")) %>%
-    filter(!is.na(first_click) & first_click <= results)%>%
-    ggplot(aes(x = session_start_date, y = first_click)) +
-    geom_jitter(alpha=0.4)+
-   labs(fill="")
-```
-
-```{r}
-buscas %>% 
+    filter( group == 'a')%>% 
+    group_by(session_start_date) %>%
+    summarise(count=n())%>%
+    pull(count)
+  clickRateHoraA <- dado %>%
+    filter(num_clicks == 0) %>%
+    slice(indices) %>% 
     mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>%
-    filter(!is.na(first_click) & first_click <= results)%>%
-    group_by(session_start_date)%>%
-    summarise(mediana = median(first_click))%>%
-    ggplot(aes(x = session_start_date, y = mediana)) +
-    geom_point(alpha=0.4)
-```
+    filter( group == 'a')%>% 
+    group_by(session_start_date) %>%
+    summarise(count=n())%>%
+    pull(count)
 
-```{r}
-buscas %>% 
+  
+  resultadoA = clickRateHoraA / TotalPorHoraA
+  
+  TotalPorHoraB <- dado %>%
+    slice(indices) %>% 
     mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>%
-    filter(!is.na(first_click) & first_click <= results)%>%
-    group_by(session_start_date)%>%
-    summarise(media = mean(first_click))%>%
-    ggplot(aes(x = session_start_date, y = media)) +
-    geom_point(alpha=0.4)
+    filter( group == 'b')%>% 
+    group_by(session_start_date) %>%
+    summarise(count=n())%>%
+    pull(count)
+  clickRateHoraB <- dado %>%
+    slice(indices) %>% 
+    filter(num_clicks == 0) %>%
+    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>%
+    filter( group == 'b')%>% 
+    group_by(session_start_date) %>%
+    summarise(count=n())%>%
+    pull(count)
+
+  
+  resultadoB = clickRateHoraB / TotalPorHoraB
+  
+  return(mean(resultadoA) - mean(resultadoB))
+}
+
+bootstraps <- boot(data = buscas, 
+                 statistic = funcao_bootstrap, 
+                 R = 2000)
+
+summary(bootstraps$t)
+
+boot.ci(boot.out = bootstraps, conf = 0.95, type = "basic")
 ```
+Como podemos ver pelo resultado da comparação, o intervalo não passa pelo 0 o que significa que com uma confiança de 95% podemos afirmar que há uma diferença significativa entre o grupo A e o grupo B na população. Essa diferença está entre 13,24% e 14,35% onde o grupo B é maior que o grupo A.
 
-Como podemos ver nos gráficos os dados não relativos ao primeiro clique não variam em relação aos dias e quase todos eles estão localizados na primeira página levando em consideração que sejam exibidos 20-25 por página. O que significa que a maioria do usários buscam respostas na primeira página. 
-
-##Let session length be approximately the time between the first event and the last event in a session. Choose a variable from the dataset and describe its relationship to session length. Visualize the relationship.
+##Testa o que acontece se para a pergunta 1, em vez de comparar o grupo A com o grupo B (um teste A/B), você compara metade das sessões do grupo A (escolhida aleatoriamente) com outra metade das sessões do mesmo grupo (um teste A/A).
 
 ```{r}
-events %>% 
-    group_by(session_id)%>%
-    arrange(date)%>%
-    filter(search_index > 0)%>%
-    summarise(diferenca = as.numeric(difftime((last(date) + ifelse(is.na(last(checkin)), 
-                             0, 
-                             last(checkin)
-        )), first(date), units = "sec")) ,
-              num_clicks = sum(action == "visitPage"))%>%
-    ggplot(aes(x = diferenca , y = num_clicks )) +
-    scale_x_log10()+
-    geom_point(alpha = 0.4)
-    
+
+buscas_a <- buscas %>% filter(group == 'a')
+smp_size <- floor(0.5 * nrow(buscas_a))
+ind <- sample(seq_len(nrow(buscas_a)), size = smp_size)
+
+train <- buscas_a[ind, ]%>%
+  mutate(tipo = 1)
+test <- buscas_a[-ind, ]%>%
+  mutate(tipo = 2)
+
+buscas_a <- bind_rows(test, train)
+
+funcao_bootstrap <- function(dado, indices) {
+
+  TotalPorHoraA <- dado %>%
+    slice(indices) %>% 
+    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>%
+    filter( tipo == 1)%>% 
+    group_by(session_start_date) %>%
+    summarise(count=n())%>%
+    pull(count)
+  clickRateHoraA <- dado %>%
+    filter(num_clicks > 0) %>%
+    slice(indices) %>% 
+    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>%
+    filter( tipo == 1)%>% 
+    group_by(session_start_date) %>%
+    summarise(count=n())%>%
+    pull(count)
+
+  
+  resultadoA = clickRateHoraA / TotalPorHoraA
+  
+  TotalPorHoraB <- dado %>%
+    slice(indices) %>% 
+    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>%
+    filter( tipo == 2)%>% 
+    group_by(session_start_date) %>%
+    summarise(count=n())%>%
+    pull(count)
+  clickRateHoraB <- dado %>%
+    slice(indices) %>% 
+    filter(num_clicks > 0) %>%
+    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>%
+    filter( tipo == 2)%>% 
+    group_by(session_start_date) %>%
+    summarise(count=n())%>%
+    pull(count)
+
+  
+  resultadoB = clickRateHoraB / TotalPorHoraB
+  
+  return(mean(resultadoA) - mean(resultadoB))
+}
+
+bootstraps <- boot(data = buscas_a, 
+                 statistic = funcao_bootstrap, 
+                 R = 2000)
+
+summary(bootstraps$t)
+
+boot.ci(boot.out = bootstraps, conf = 0.95, type = "basic")
 ```
+Como esperado, podemos ver que o intervalo passa pelo zero, logo, com uma confiança de 95%, não podemos afirmar que existe uma diferença entre a média de clique entre os dois subconjuntos de A.
 
-
-Intuitivamente, acreditamos que se uma sessão quando está durando pode significar duas coisas que são: O usuário encontou o que estava procurando e ficou lendo o artigo ou não encontrou o que procurava e continua fazendo pesquisas. Aqui tentamos associar a quantidade de acessos de itens nas pesquisas  com o tamanho da sessão. Como podemos ver a quantidade de acesso a itens tende a crescer junto com a sessão até determinado ponto e a partir desse ponto o número de cliques fica próximo de um. Uma explicação para esse comportamento é que os usuário que tem uma sessão maior que o ponto que muda o comportamento acharam de primeira e ficaram lendo o artigo sobre o que procuravam.Já nos casos que o número de clique cresceu com a sessão mostra que o usuário não tava satisfeito com os resultados mostrados e continuou procurando até um ponto em que encontou um resultado útil.
