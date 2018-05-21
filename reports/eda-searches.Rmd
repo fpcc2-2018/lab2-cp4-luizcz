@@ -63,7 +63,15 @@ bootstraps <- boot(data = buscas,
 
 summary(bootstraps$t)
 
-boot.ci(boot.out = bootstraps, conf = 0.95, type = "basic")
+boot_basic <- boot.ci(boot.out = bootstraps, conf = 0.95, type = "basic")
+
+dados <- tibble(estatistica = as.double(boot_basic$t0),mini = as.double(boot_basic$basic[4]), maxi = as.double(boot_basic$basic[5]), tipo="Daily overall clickthrough rate") 
+
+ggplot(dados, aes(y=estatistica, x=tipo)) + 
+  geom_point(size=3) + # point for group mean
+  geom_errorbar(aes(ymax=maxi, ymin=mini), width=0.2)
+
+boot_basic
 ```
 
 A taxa de clique geral média encontrada na população com uma confiança de 95% está localizada no intervalo entre 24,24% e 24,72%.
@@ -115,15 +123,66 @@ funcao_bootstrap <- function(dado, indices) {
   return(mean(resultadoA) - mean(resultadoB))
 }
 
+funcao_bootstrap_geral <- function(dado, indices) {
+
+  TotalPorHora <- dado %>%
+    slice(indices) %>% 
+    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>% 
+    group_by(session_start_date) %>%
+    summarise(count=n())%>%
+    pull(count)
+  clickRateHora <- dado %>%
+    filter(num_clicks > 0) %>%
+    slice(indices) %>% 
+    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>% 
+    group_by(session_start_date) %>%
+    summarise(count=n())%>%
+    pull(count)
+
+  
+  resultado = clickRateHora / TotalPorHora
+  
+  return(mean(resultado))
+}
+
+buscas_a <- buscas  %>% filter(group == 'a')
+buscas_b <- buscas  %>% filter(group == 'b')
+
 bootstraps <- boot(data = buscas, 
                  statistic = funcao_bootstrap, 
                  R = 2000)
 
-summary(bootstraps$t)
+bootstraps_a <- boot(data = buscas_a, 
+                 statistic = funcao_bootstrap_geral, 
+                 R = 2000)
 
-boot.ci(boot.out = bootstraps, conf = 0.95, type = "basic")
+bootstraps_b <- boot(data = buscas_b, 
+                 statistic = funcao_bootstrap_geral, 
+                 R = 2000)
+
+#summary(bootstraps$t)
+
+boot_basic <- boot.ci(boot.out = bootstraps, conf = 0.95, type = "basic")
+boot_basic_a <- boot.ci(boot.out = bootstraps_a, conf = 0.95, type = "basic")
+boot_basic_b <- boot.ci(boot.out = bootstraps_b, conf = 0.95, type = "basic")
+
+dados <- tibble(estatistica = as.double(boot_basic$t0),mini = as.double(boot_basic$basic[4]), maxi = as.double(boot_basic$basic[5]), tipo="Diferença da média") 
+
+dados_a <- tibble(estatistica = as.double(boot_basic_a$t0),mini = as.double(boot_basic_a$basic[4]), maxi = as.double(boot_basic_a$basic[5]), tipo="A") 
+
+dados_b <- tibble(estatistica = as.double(boot_basic$t0),mini = as.double(boot_basic$basic[4]), maxi = as.double(boot_basic$basic[5]), tipo="B") 
+
+resultados <- bind_rows(dados_a, dados, dados_b)
+
+ggplot(resultados, aes(y=estatistica, x=tipo)) + 
+  geom_point(size=3) + # point for group mean
+  geom_errorbar(aes(ymax=maxi, ymin=mini), width=0.2)
+
+boot_basic
+
 ```
 Como podemos ver pelo resultado da comparação, o intervalo não passa pelo 0 o que significa que com uma confiança de 95% podemos afirmar que há uma diferença significativa entre o grupo A e o grupo B na população. Essa diferença está entre 13,15% e 14,35% onde o grupo A tem taxas maiores que o grupo B.
+
 ##What is our daily overall zero results rate? How does it vary between the groups?
 ```{r}
 
@@ -136,7 +195,7 @@ funcao_bootstrap <- function(dado, indices) {
     summarise(count=n())%>%
     pull(count)
   clickRateHora <- dado %>%
-    filter(num_clicks == 0) %>%
+    filter(results == 0) %>%
     slice(indices) %>% 
     mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>% 
     group_by(session_start_date) %>%
@@ -155,10 +214,18 @@ bootstraps <- boot(data = buscas,
 
 summary(bootstraps$t)
 
-boot.ci(boot.out = bootstraps, conf = 0.95, type = "basic")
+boot_basic <- boot.ci(boot.out = bootstraps, conf = 0.95, type = "basic")
+dados <- tibble(estatistica = as.double(boot_basic$t0),mini = as.double(boot_basic$basic[4]), maxi = as.double(boot_basic$basic[5]), tipo="Zero result rate") 
+
+ggplot(dados, aes(y=estatistica, x=tipo)) + 
+  geom_point(size=3) + # point for group mean
+  geom_errorbar(aes(ymax=maxi, ymin=mini), width=0.2)
+
+boot_basic
+
 ```
 
-A taxa de zero clique geral média encontrada na população com uma confiança de 95% está localizada no intervalo entre 75,05% e 75,68%.
+A taxa de zero resultados média encontrada na população com uma confiança de 95% está localizada no intervalo entre 18,15% e 18,59%.
 
 #Comparando entre os grupos
 
@@ -174,7 +241,7 @@ funcao_bootstrap <- function(dado, indices) {
     summarise(count=n())%>%
     pull(count)
   clickRateHoraA <- dado %>%
-    filter(num_clicks == 0) %>%
+    filter(results == 0) %>%
     slice(indices) %>% 
     mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>%
     filter( group == 'a')%>% 
@@ -194,7 +261,7 @@ funcao_bootstrap <- function(dado, indices) {
     pull(count)
   clickRateHoraB <- dado %>%
     slice(indices) %>% 
-    filter(num_clicks == 0) %>%
+    filter(results == 0) %>%
     mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>%
     filter( group == 'b')%>% 
     group_by(session_start_date) %>%
@@ -207,13 +274,64 @@ funcao_bootstrap <- function(dado, indices) {
   return(mean(resultadoA) - mean(resultadoB))
 }
 
+funcao_bootstrap_geral <- function(dado, indices) {
+
+  TotalPorHora <- dado %>%
+    slice(indices) %>% 
+    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>% 
+    group_by(session_start_date) %>%
+    summarise(count=n())%>%
+    pull(count)
+  clickRateHora <- dado %>%
+    filter(results == 0) %>%
+    slice(indices) %>% 
+    mutate(session_start_date = round_date(session_start_date, unit = "hour")) %>% 
+    group_by(session_start_date) %>%
+    summarise(count=n())%>%
+    pull(count)
+
+  
+  resultado = clickRateHora / TotalPorHora
+  
+  return(mean(resultado))
+}
+
+
 bootstraps <- boot(data = buscas, 
                  statistic = funcao_bootstrap, 
                  R = 2000)
 
+bootstraps_a <- boot(data = buscas_a, 
+                 statistic = funcao_bootstrap_geral, 
+                 R = 2000)
+
+bootstraps_b <- boot(data = buscas_b, 
+                 statistic = funcao_bootstrap_geral, 
+                 R = 2000)
+
+
 summary(bootstraps$t)
 
-boot.ci(boot.out = bootstraps, conf = 0.95, type = "basic")
+
+boot_basic <- boot.ci(boot.out = bootstraps, conf = 0.95, type = "basic")
+boot_basic_a <- boot.ci(boot.out = bootstraps_a, conf = 0.95, type = "basic")
+boot_basic_b <- boot.ci(boot.out = bootstraps_b, conf = 0.95, type = "basic")
+
+dados <- tibble(estatistica = as.double(boot_basic$t0),mini = as.double(boot_basic$basic[4]), maxi = as.double(boot_basic$basic[5]), tipo="Diferença da média") 
+
+dados_a <- tibble(estatistica = as.double(boot_basic_a$t0),mini = as.double(boot_basic_a$basic[4]), maxi = as.double(boot_basic_a$basic[5]), tipo="A") 
+
+dados_b <- tibble(estatistica = as.double(boot_basic$t0),mini = as.double(boot_basic$basic[4]), maxi = as.double(boot_basic$basic[5]), tipo="B") 
+
+resultados <- bind_rows(dados_a, dados, dados_b)
+
+ggplot(resultados, aes(y=estatistica, x=tipo)) + 
+  geom_point(size=3) + # point for group mean
+  geom_errorbar(aes(ymax=maxi, ymin=mini), width=0.2)
+
+boot_basic
+
+
 ```
 Como podemos ver pelo resultado da comparação, o intervalo não passa pelo 0 o que significa que com uma confiança de 95% podemos afirmar que há uma diferença significativa entre o grupo A e o grupo B na população. Essa diferença está entre 13,24% e 14,35% onde o grupo B é maior que o grupo A.
 
