@@ -61,14 +61,14 @@ bootstraps <- boot(data = buscas,
                  statistic = funcao_bootstrap, 
                  R = 2000)
 
-summary(bootstraps$t)
+plot(bootstraps)
 
 boot_basic <- boot.ci(boot.out = bootstraps, conf = 0.95, type = "basic")
 
 dados <- tibble(estatistica = as.double(boot_basic$t0),mini = as.double(boot_basic$basic[4]), maxi = as.double(boot_basic$basic[5]), tipo="Daily overall clickthrough rate") 
 
 ggplot(dados, aes(y=estatistica, x=tipo)) + 
-  geom_point(size=3) + # point for group mean
+  geom_point(size=3) + 
   geom_errorbar(aes(ymax=maxi, ymin=mini), width=0.2)
 
 boot_basic
@@ -160,7 +160,7 @@ bootstraps_b <- boot(data = buscas_b,
                  statistic = funcao_bootstrap_geral, 
                  R = 2000)
 
-#summary(bootstraps$t)
+plot(bootstraps)
 
 boot_basic <- boot.ci(boot.out = bootstraps, conf = 0.95, type = "basic")
 boot_basic_a <- boot.ci(boot.out = bootstraps_a, conf = 0.95, type = "basic")
@@ -175,7 +175,7 @@ dados_b <- tibble(estatistica = as.double(boot_basic$t0),mini = as.double(boot_b
 resultados <- bind_rows(dados_a, dados, dados_b)
 
 ggplot(resultados, aes(y=estatistica, x=tipo)) + 
-  geom_point(size=3) + # point for group mean
+  geom_point(size=3) + 
   geom_errorbar(aes(ymax=maxi, ymin=mini), width=0.2)
 
 boot_basic
@@ -212,13 +212,13 @@ bootstraps <- boot(data = buscas,
                  statistic = funcao_bootstrap, 
                  R = 2000)
 
-summary(bootstraps$t)
+plot(bootstraps)
 
 boot_basic <- boot.ci(boot.out = bootstraps, conf = 0.95, type = "basic")
 dados <- tibble(estatistica = as.double(boot_basic$t0),mini = as.double(boot_basic$basic[4]), maxi = as.double(boot_basic$basic[5]), tipo="Zero result rate") 
 
 ggplot(dados, aes(y=estatistica, x=tipo)) + 
-  geom_point(size=3) + # point for group mean
+  geom_point(size=3) + 
   geom_errorbar(aes(ymax=maxi, ymin=mini), width=0.2)
 
 boot_basic
@@ -310,7 +310,7 @@ bootstraps_b <- boot(data = buscas_b,
                  R = 2000)
 
 
-summary(bootstraps$t)
+plot(bootstraps)
 
 
 boot_basic <- boot.ci(boot.out = bootstraps, conf = 0.95, type = "basic")
@@ -321,19 +321,19 @@ dados <- tibble(estatistica = as.double(boot_basic$t0),mini = as.double(boot_bas
 
 dados_a <- tibble(estatistica = as.double(boot_basic_a$t0),mini = as.double(boot_basic_a$basic[4]), maxi = as.double(boot_basic_a$basic[5]), tipo="A") 
 
-dados_b <- tibble(estatistica = as.double(boot_basic$t0),mini = as.double(boot_basic$basic[4]), maxi = as.double(boot_basic$basic[5]), tipo="B") 
+dados_b <- tibble(estatistica = as.double(boot_basic_b$t0),mini = as.double(boot_basic_b$basic[4]), maxi = as.double(boot_basic_b$basic[5]), tipo="B") 
 
 resultados <- bind_rows(dados_a, dados, dados_b)
 
 ggplot(resultados, aes(y=estatistica, x=tipo)) + 
-  geom_point(size=3) + # point for group mean
+  geom_point(size=3) +
   geom_errorbar(aes(ymax=maxi, ymin=mini), width=0.2)
 
 boot_basic
 
 
 ```
-Como podemos ver pelo resultado da comparação, o intervalo não passa pelo 0 o que significa que com uma confiança de 95% podemos afirmar que há uma diferença significativa entre o grupo A e o grupo B na população. Essa diferença está entre 13,24% e 14,35% onde o grupo B é maior que o grupo A.
+Como podemos ver pelo resultado da comparação, o intervalo não passa pelo 0 o que significa que com uma confiança de 95% podemos afirmar que há uma diferença significativa entre o grupo A e o grupo B na população. Essa diferença está entre 1,03% e 0,06% onde o grupo B é maior que o grupo A.
 
 ##Testa o que acontece se para a pergunta 1, em vez de comparar o grupo A com o grupo B (um teste A/B), você compara metade das sessões do grupo A (escolhida aleatoriamente) com outra metade das sessões do mesmo grupo (um teste A/A).
 
@@ -402,4 +402,122 @@ summary(bootstraps$t)
 boot.ci(boot.out = bootstraps, conf = 0.95, type = "basic")
 ```
 Como esperado, podemos ver que o intervalo passa pelo zero, logo, com uma confiança de 95%, não podemos afirmar que existe uma diferença entre a média de clique entre os dois subconjuntos de A.
+
+##Which results do people tend to try first? How does it change day-to-day?
+```{r}
+buscas_interesse <- buscas%>% 
+    mutate(session_start_date = round_date(session_start_date, unit = "day")) %>%
+    filter(!is.na(first_click) & first_click <= results)
+
+primeiro_clique <- function(dados, indices) {
+    resultado <- dados %>% 
+            slice(indices) %>%
+            pull(first_click) %>%
+            quantile(.95)
+    
+    return(resultado)
+}
+
+bootstraps <- boot(data = buscas_interesse, 
+                 statistic = primeiro_clique, 
+                 R = 2000)
+plot(bootstraps)
+boot_basic <- boot.ci(boot.out = bootstraps, conf = 0.95, type = "basic")
+dados <- tibble(estatistica = as.double(boot_basic$t0),mini = as.double(boot_basic$basic[4]), maxi = as.double(boot_basic$basic[5]), tipo="First result tried") 
+
+ggplot(dados, aes(y=estatistica, x=tipo)) + 
+  geom_point(size=3) + 
+  geom_errorbar(aes(ymax=maxi, ymin=mini), width=0.2)
+
+boot_basic
+```
+O valor de 95 percentil do valor de primeiro clique encontrado na população com uma confiança de 95% está localizado no intervalo entre 8 e 9.
+```{r}
+buscas_interesse <- buscas_interesse %>%mutate(dia_da_semana = strftime(session_start_date, '%u'))
+filtrar_por_dia <- function(dia, busca) {
+    resultado <- busca %>%
+                    filter(dia_da_semana == dia)
+    return(resultado)
+}
+valores_domingo <- filtrar_por_dia(7, buscas_interesse)
+valores_segunda <- filtrar_por_dia(1,buscas_interesse)
+valores_terca <- filtrar_por_dia(2,buscas_interesse)
+valores_quarta <- filtrar_por_dia(3, buscas_interesse)
+valores_quinta <- filtrar_por_dia(4, buscas_interesse)
+valores_sexta <- filtrar_por_dia(5, buscas_interesse)
+valores_sabado <- filtrar_por_dia(6, buscas_interesse)
+
+primeiro_clique <- function(dados, indices) {
+    resultado <- dados %>% 
+            slice(indices) %>%
+            pull(first_click) %>%
+            quantile(.95)
+    
+    return(resultado)
+}
+
+
+bootstraps_1 <- boot(data = valores_segunda, 
+                 statistic = primeiro_clique, 
+                 R = 2000)
+
+bootstraps_2 <- boot(data = valores_terca, 
+                 statistic = primeiro_clique, 
+                 R = 2000)
+
+bootstraps_3 <- boot(data = valores_quarta, 
+                 statistic = primeiro_clique, 
+                 R = 2000)
+bootstraps_4 <- boot(data = valores_quinta, 
+                 statistic = primeiro_clique, 
+                 R = 2000)
+
+bootstraps_5 <- boot(data = valores_sexta, 
+                 statistic = primeiro_clique, 
+                 R = 2000)
+
+bootstraps_6 <- boot(data = valores_sabado, 
+                 statistic = primeiro_clique, 
+                 R = 2000)
+
+bootstraps_7 <- boot(data = valores_domingo, 
+                 statistic = primeiro_clique, 
+                 R = 2000)
+
+
+
+
+boot_basic_1 <- boot.ci(boot.out = bootstraps_1, conf = 0.95, type = "basic")
+boot_basic_2 <- boot.ci(boot.out = bootstraps_2, conf = 0.95, type = "basic")
+boot_basic_3 <- boot.ci(boot.out = bootstraps_3, conf = 0.95, type = "basic")
+boot_basic_4 <- boot.ci(boot.out = bootstraps_4, conf = 0.95, type = "basic")
+boot_basic_5 <- boot.ci(boot.out = bootstraps_5, conf = 0.95, type = "basic")
+boot_basic_6 <- boot.ci(boot.out = bootstraps_6, conf = 0.95, type = "basic")
+boot_basic_7 <- boot.ci(boot.out = bootstraps_7, conf = 0.95, type = "basic")
+
+
+
+dados_1 <- tibble(estatistica = as.double(boot_basic_1$t0),mini = as.double(boot_basic_1$basic[4]), maxi = as.double(boot_basic_1$basic[5]), tipo="Segunda") 
+
+dados_2 <- tibble(estatistica = as.double(boot_basic_2$t0),mini = as.double(boot_basic_2$basic[4]), maxi = as.double(boot_basic_2$basic[5]), tipo="Terça") 
+
+dados_3 <- tibble(estatistica = as.double(boot_basic_3$t0),mini = as.double(boot_basic_3$basic[4]), maxi = as.double(boot_basic_3$basic[5]), tipo="Quarta")
+
+dados_4 <- tibble(estatistica = as.double(boot_basic_4$t0),mini = as.double(boot_basic_4$basic[4]), maxi = as.double(boot_basic_4$basic[5]), tipo="Quinta") 
+
+dados_5 <- tibble(estatistica = as.double(boot_basic_5$t0),mini = as.double(boot_basic_5$basic[4]), maxi = as.double(boot_basic_5$basic[5]), tipo="Sexta") 
+
+dados_6 <- tibble(estatistica = as.double(boot_basic_6$t0),mini = as.double(boot_basic_6$basic[4]), maxi = as.double(boot_basic_6$basic[5]), tipo="Sábado") 
+
+dados_7 <- tibble(estatistica = as.double(boot_basic_7$t0),mini = as.double(boot_basic_7$basic[4]), maxi = as.double(boot_basic_7$basic[5]), tipo="Domingo") 
+
+resultados <- bind_rows(dados_1, dados_2, dados_3,dados_4, dados_5, dados_6, dados_7)
+
+
+ggplot(resultados, aes(y=estatistica, x=tipo)) + 
+  geom_point(size=3) +
+  geom_errorbar(aes(ymax=maxi, ymin=mini), width=0.2)
+
+```
+
 
